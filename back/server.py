@@ -1,52 +1,24 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Final
+
+from fastapi import FastAPI, WebSocket
+
 load_dotenv()
 
-client = OpenAI()
 AI_MODEL: Final[str] = "gpt-4.1"
 
-response = client.responses.create(
-  model=AI_MODEL,
-  input=[
-    {
-      "role": "system",
-      "content": [
-        {
-          "type": "input_text",
-          "text": "your frendly and helpfull"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "input_text",
-          "text": "hello"
-        }
-      ]
-    }
-  ],
-  text={
-    "format": {
-      "type": "text"
-    }
-  },
-  reasoning={},
-  tools=[],
-  temperature=1,
-  max_output_tokens=2048,
-  top_p=1,
-  store=True
-)
+ai_client = OpenAI()
 
-while True:
-    print(f" AI: {response.output_text}")
-    user_input: str = input()
-    response = client.responses.create(
-        model=AI_MODEL,
-        previous_response_id=response.id,
-        input=[{"role": "user", "content": user_input}],
-    )
-    
+app=FastAPI()
+
+@app.get("/heart-beat")
+def heart_beat():
+    return {"status":"okay"}
+
+@app.websocket("/chat-ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        await websocket.send_text(f"message sent was: {data}")
