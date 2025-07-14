@@ -1,6 +1,8 @@
 "use client";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Interface } from "readline";
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from "remark-gfm";
 // import WebSocket from 'ws';
 
 export default function Home() {
@@ -45,6 +47,12 @@ export default function Home() {
     setUserInput(e.target.value);
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement> ){
+    if (e.key==="Enter"&&e.ctrlKey){
+      sendUserInput()
+    }
+  }
+
   function sendUserInput() {
     wsRef.current?.send(userInput)
     const userResponse = {
@@ -55,6 +63,7 @@ export default function Home() {
     setChatHistory((prevState)=>{
       return [...prevState,userResponse]
     })
+    setUserInput("")
   }
 
   return (
@@ -71,18 +80,20 @@ export default function Home() {
             } else if (singleChat.owner === OwnerEnum.ai) {
               return (
                 <div key={singleChat.message} className="bg-blue-900">
-                  <p>{singleChat.message}</p>
+                  <ReactMarkdown children={singleChat.message} remarkPlugins={[remarkGfm]} />
                 </div>
               );
             }
           })}
         </div>
         <textarea
+          className="border-2 border-blue-500 "
           name="userInput"
           id="userInput"
           value={userInput}
-          onChange={handleUserInput}></textarea>
-        <button className="h-8" onClick={sendUserInput}>send</button>
+          onChange={handleUserInput}
+          onKeyDown={handleKeyDown}></textarea>
+        <button className="h-8 border-2 border-amber-200" onClick={sendUserInput}>send</button>
       </div>
     </div>
   );

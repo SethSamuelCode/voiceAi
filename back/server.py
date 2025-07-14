@@ -10,6 +10,41 @@ AI_MODEL: Final[str] = "gpt-4.1"
 
 ai_client = OpenAI()
 
+async def startChat(userIn: str):
+    return ai_client.responses.create(
+    model=AI_MODEL,
+    input=[
+        {
+        "role": "system",
+        "content": [
+            {
+            "type": "input_text",
+            "text": "your frendly and helpfull"
+            }
+        ]
+        },
+        {
+        "role": "user",
+        "content": [
+            {
+            "type": "input_text",
+            "text": userIn
+            }
+        ]
+        }
+    ],
+    text={
+        "format": {
+        "type": "text"
+        }
+    },
+    reasoning={},
+    tools=[],
+    temperature=1,
+    top_p=1,
+    store=True
+    )
+
 app=FastAPI()
 
 @app.get("/heart-beat")
@@ -19,10 +54,18 @@ def heart_beat():
 @app.websocket("/chat-ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    firstUserInput = await websocket.receive_text()
+    chatObject = await startChat(firstUserInput)
+    await websocket.send_text(chatObject.output_text)
     try:
         while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(f"message sent was: {data}")
+            userIn = await websocket.receive_text()
+            aiResponse = ai_client.responses.create(
+                model=AI_MODEL,
+                previous_response_id=chatObject.id,
+                input=[{"role":"user","content": userIn}]
+            )
+            await websocket.send_text(aiResponse.output_text)
     except WebSocketDisconnect:
         print("client disconnected")
     except Exception as e :
