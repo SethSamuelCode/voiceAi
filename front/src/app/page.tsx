@@ -1,10 +1,36 @@
 "use client";
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Interface } from "readline";
+// import WebSocket from 'ws';
 
 export default function Home() {
   const [userInput, setUserInput] = useState<string>("");
   const [chatHistory, setChatHistory] = useState<Array<ChatObject>>([]);
+  // const socket: WebSocket = new WebSocket("ws://localhost:8000/chat-ws");
+  // socket.binaryType = "arraybuffer"
+  const wsRef = useRef<WebSocket|null>(null)
+
+  useEffect(()=>{
+    const websocket = new WebSocket("ws://localhost:8000/chat-ws");
+    wsRef.current = websocket;
+
+    websocket.onopen = () =>{
+      console.log("Websocket connected")
+    }
+
+    websocket.onmessage = (event)=>{
+
+      const aiResponse: ChatObject = {
+        owner: OwnerEnum.ai,
+        message: event.data.toString()
+      }
+
+      setChatHistory((prevState)=>{
+        return [...prevState, aiResponse]
+      } )
+    }
+
+  },[])
 
   enum OwnerEnum {
     user = "user",
@@ -19,7 +45,17 @@ export default function Home() {
     setUserInput(e.target.value);
   }
 
-  function sendUserInput() {}
+  function sendUserInput() {
+    wsRef.current?.send(userInput)
+    const userResponse = {
+      owner: OwnerEnum.user,
+      message: userInput
+    }
+
+    setChatHistory((prevState)=>{
+      return [...prevState,userResponse]
+    })
+  }
 
   return (
     <div className="flex justify-center items-center h-screen">
@@ -29,13 +65,13 @@ export default function Home() {
             if (singleChat.owner === OwnerEnum.user) {
               return (
                 <div key={singleChat.message} className="bg-green-400">
-                  <p>singleChat.message</p>
+                  <p>{singleChat.message}</p>
                 </div>
               );
             } else if (singleChat.owner === OwnerEnum.ai) {
               return (
-                <div key={singleChat.message} className="bg-amber-300">
-                  <p>singleChat.message</p>
+                <div key={singleChat.message} className="bg-blue-900">
+                  <p>{singleChat.message}</p>
                 </div>
               );
             }
@@ -46,7 +82,7 @@ export default function Home() {
           id="userInput"
           value={userInput}
           onChange={handleUserInput}></textarea>
-        <button className="h-8">send</button>
+        <button className="h-8" onClick={sendUserInput}>send</button>
       </div>
     </div>
   );

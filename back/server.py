@@ -2,7 +2,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Final
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 load_dotenv()
 
@@ -19,6 +19,12 @@ def heart_beat():
 @app.websocket("/chat-ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        await websocket.send_text(f"message sent was: {data}")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"message sent was: {data}")
+    except WebSocketDisconnect:
+        print("client disconnected")
+    except Exception as e :
+        print(f"error: {e}") 
+    
