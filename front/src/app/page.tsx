@@ -67,19 +67,19 @@ export default function Home() {
   }
 
   return (
-    <div className="flex justify-center items-center h-screen">
-      <div className="flex flex-col w-4/5">
-        <div>
+    <div className="flex justify-center items-center overflow-y-auto">
+      <div className="flex flex-col w-11/12">
+        <div className="flex flex-col gap-2">
           {chatHistory.map((singleChat: ChatObject) => {
             if (singleChat.owner === OwnerEnum.user) {
               return (
-                <div key={singleChat.message} className="bg-green-400">
+                <div key={singleChat.message} className="bg-green-400 rounded-2xl p-2">
                   <p>{singleChat.message}</p>
                 </div>
               );
             } else if (singleChat.owner === OwnerEnum.ai) {
               return (
-                <div key={singleChat.message} className="bg-blue-900">
+                <div key={singleChat.message} className="bg-blue-900 rounded-2xl p-2">
                   <ReactMarkdown children={singleChat.message} remarkPlugins={[remarkGfm]} />
                 </div>
               );
