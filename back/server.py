@@ -1,6 +1,9 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Final
+import requests 
+import json
+import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
@@ -52,7 +55,7 @@ def heart_beat():
     return {"status":"okay"}
 
 @app.websocket("/chat-ws-text")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_text_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         firstUserInput = await websocket.receive_text()
@@ -71,3 +74,23 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e :
         print(f"error: {e}") 
     
+
+@app.get("/key-for-webrtc")
+async def get_webrtc_key():
+    url: Final[str] = "https://api.openai.com/v1/realtime/sessions"
+    headers: Final = {"Authorization":f"Bearer {os.getenv("OPENAI_API_KEY")}", "Content-Type": "application/json"}
+    payload: Final = {"model":"gpt-4o-mini-realtime-preview","voice":"coral"}
+    response = requests.post(url,headers=headers,data=json.dumps(payload))
+    jsonResp = response.json()
+
+    return jsonResp
+
+# @app.websocket("/chat-ws-voice")
+# async def websocket_voice_endpoint(websocket: WebSocket):
+#     await websocket.accept()
+#     try:
+        
+#     except WebSocketDisconnect:
+#         print("client disconnected")
+#     except Exception as e :
+#         print(f"error: {e}") 

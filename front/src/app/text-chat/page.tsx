@@ -3,9 +3,10 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Interface } from "readline";
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from "remark-gfm";
+
 // import WebSocket from 'ws';
 
-export default function Home() {
+export default function Page() {
   const [userInput, setUserInput] = useState<string>("");
   const [chatHistory, setChatHistory] = useState<Array<ChatObject>>([]);
   // const socket: WebSocket = new WebSocket("ws://localhost:8000/chat-ws");

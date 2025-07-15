@@ -1,10 +1,15 @@
 import React from "react";
+import Link from "next/link";
 
 export default function page() {
   return (
-    <div className="grid grid-cols-2 h-screen v-screen [&_div]:border [&_div]:border-red-500 gap-4 p-4 [&_div]:flex [&_div]:justify-center [&_div]:items-center [&_div]:hover:bg-blue-300 [&_div]:text-8xl [&_div]:cursor-pointer ">
-      <div>chat</div>
-      <div>voice</div>
+    <div className="grid grid-cols-2 h-screen v-screen *:border *:border-red-500 gap-4 p-4 *:flex *:justify-center *:items-center *:hover:bg-blue-300 *:text-8xl *:cursor-pointer ">
+      <Link href="/text-chat">
+        <div>chat</div>
+      </Link>
+      <Link href="/voice-chat">
+        <div>voice</div>
+      </Link>
     </div>
   );
 }
