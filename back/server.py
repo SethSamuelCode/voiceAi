@@ -51,13 +51,13 @@ app=FastAPI()
 def heart_beat():
     return {"status":"okay"}
 
-@app.websocket("/chat-ws")
+@app.websocket("/chat-ws-text")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    firstUserInput = await websocket.receive_text()
-    chatObject = await startChat(firstUserInput)
-    await websocket.send_text(chatObject.output_text)
     try:
+        firstUserInput = await websocket.receive_text()
+        chatObject = await startChat(firstUserInput)
+        await websocket.send_text(chatObject.output_text)
         while True:
             userIn = await websocket.receive_text()
             aiResponse = ai_client.responses.create(
