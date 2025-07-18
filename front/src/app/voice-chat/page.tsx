@@ -82,17 +82,33 @@ export default function page() {
     }
   }
 
-  async function initVoiceToTextToVoice(){
+  async function initVoiceToTextToVoice() {
+    //add local mic
+    refLocalMic.current = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+    //add playback from audio source to speakers
+    refAudioEl.current = document.createElement("audio");
+    refAudioEl.current.autoplay = true;
+
+    //give mic back to speakers
+    const micMediaStream = new MediaStream([refLocalMic.current.getTracks()[0]])
+    refAudioEl.current.srcObject=micMediaStream
   }
 
-  function stopVoiceToTextToVoice(){
-
-  }
+  function stopVoiceToTextToVoice() {
+    if (refLocalMic.current) {
+        refLocalMic.current.getTracks().forEach(track => track.stop());
+        refLocalMic.current = null;
+    }
+    if (refAudioEl.current) {
+        refAudioEl.current.srcObject = null;
+        refAudioEl.current = null;
+    }
+}
 
   return (
     <div>
-      <div className="flex flex-col border border-green-500" >
+      <div className="flex flex-col border border-green-500">
         <p className="self-center">audio to audio</p>
         <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4 [&_div]:cursor-pointer ">
           <div onClick={initVoice}>START</div>
@@ -101,9 +117,9 @@ export default function page() {
       </div>
       <div className="flex flex-col border border-green-500">
         <p className="self-center"> audio to text to audio</p>
-        <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4 [&_div]:cursor-pointer " >
+        <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4 [&_div]:cursor-pointer ">
           <div onClick={initVoiceToTextToVoice}>START</div>
-          <div onClick={stopVoiceToTextToVoice} >STOP</div>
+          <div onClick={stopVoiceToTextToVoice}>STOP</div>
         </div>
       </div>
     </div>
