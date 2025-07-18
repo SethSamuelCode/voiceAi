@@ -4,66 +4,88 @@ import React, { useEffect, useRef } from "react";
 const BACKEND_SERVER_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL;
 
 export default function page() {
+  //create peer connection
+  const refPeerConnection = useRef<RTCPeerConnection>(null);
+  //local mic input
+  const refLocalMic = useRef<MediaStream>(null);
+  //audio element ref
+  const refAudioEl = useRef<HTMLAudioElement>(null);
 
-  console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL)
-  // crate a peer connection
-  useEffect(() => {
-    //get key from backend
-    async function initVoice() {
-      const tokenRespose = await fetch(`${BACKEND_SERVER_BASE_URL}/key-for-webrtc`);
-      const data = await tokenRespose.json();
-      const AI_EPHEMERAL_KEY = data.client_secret.value;
+  console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL);
 
-      // create a peer connection
-      const peerConnection = new RTCPeerConnection();
+  async function initVoice() {
+    const tokenRespose = await fetch(`${BACKEND_SERVER_BASE_URL}/key-for-webrtc`);
+    const data = await tokenRespose.json();
+    const AI_EPHEMERAL_KEY = data.client_secret.value;
 
-      // Set up to play remote audio from model
-      const audioEl = document.createElement("audio");
-      audioEl.autoplay = true;
-      peerConnection.ontrack = (e) => {
-        audioEl.srcObject = e.streams[0];
-      };
+    //create new connection
+    refPeerConnection.current = new RTCPeerConnection();
 
-      //add local as input
-      const micDevice = await navigator.mediaDevices.getUserMedia({ audio: true });
-      peerConnection.addTrack(micDevice.getTracks()[0]);
+    // Set up to play remote audio from model
+    refAudioEl.current = document.createElement("audio");
+    refAudioEl.current.autoplay = true;
+    refPeerConnection.current.ontrack = (e) => {
+      if (refAudioEl.current) {
+        refAudioEl.current.srcObject = e.streams[0];
+      } else {
+        throw Error("mic not connected");
+      }
+    };
 
-      //set data channel for sending and receiving events
-      const dataChannel = peerConnection.createDataChannel("oai-events");
-      dataChannel.addEventListener("message", (e) => {
-        console.log(e);
-      });
+    //add local as input
+    refLocalMic.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+    refPeerConnection.current.addTrack(refLocalMic.current.getTracks()[0]);
 
-      //start session
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
+    //set data channel for sending and receiving events
+    const dataChannel = refPeerConnection.current.createDataChannel("oai-events");
+    dataChannel.addEventListener("message", (e) => {
+      console.log(e);
+    });
 
-      const AI_BASE_URL = "https://api.openai.com/v1/realtime";
-      const MODEL = process.env.OPENAI_VOICE_MODEL;
-      const sdpResponse = await fetch(`${AI_BASE_URL}?model=${MODEL}`, {
-        method: "POST",
-        body: offer.sdp,
-        headers: {
-          Authorization: `Bearer ${AI_EPHEMERAL_KEY}`,
-          "Content-Type": "application/sdp",
-        },
-      });
+    //start session
+    const offer = await refPeerConnection.current.createOffer();
+    await refPeerConnection.current.setLocalDescription(offer);
 
-      const answerFromSdpRequest: RTCSessionDescriptionInit = {
-        type: "answer",
-        sdp: await sdpResponse.text(),
-      };
+    const AI_BASE_URL = "https://api.openai.com/v1/realtime";
+    const MODEL = process.env.OPENAI_VOICE_MODEL;
+    const sdpResponse = await fetch(`${AI_BASE_URL}?model=${MODEL}`, {
+      method: "POST",
+      body: offer.sdp,
+      headers: {
+        Authorization: `Bearer ${AI_EPHEMERAL_KEY}`,
+        "Content-Type": "application/sdp",
+      },
+    });
 
-      await peerConnection.setRemoteDescription(answerFromSdpRequest);
+    const answerFromSdpRequest: RTCSessionDescriptionInit = {
+      type: "answer",
+      sdp: await sdpResponse.text(),
+    };
+
+    await refPeerConnection.current.setRemoteDescription(answerFromSdpRequest);
+  }
+
+  function stopAndCleanUpVoice() {
+    if (refPeerConnection.current) {
+      refPeerConnection.current.close();
+      refPeerConnection.current.ontrack = null;
+      refPeerConnection.current = null;
     }
-
-    initVoice();
-    return () => {};
-  }, []);
+    if (refLocalMic.current) {
+      refLocalMic.current.getTracks().forEach((track) => {
+        track.stop();
+      });
+      refLocalMic.current = null;
+    }
+    if (refAudioEl.current) {
+      refAudioEl.current = null;
+    }
+  }
 
   return (
-    <div>
-      <p>voice</p>
+    <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4">
+      <div onClick={initVoice}>START</div>
+      <div onClick={stopAndCleanUpVoice}>STOP</div>
     </div>
   );
 }
