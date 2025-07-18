@@ -1,9 +1,11 @@
 "use client";
 import { connect } from "http2";
 import React, { useEffect, useRef } from "react";
-const BACKEND_SERVER_BASE_URL = process.env.BACKEND_SERVER_BASE_URL;
+const BACKEND_SERVER_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL;
 
 export default function page() {
+
+  console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL)
   // crate a peer connection
   useEffect(() => {
     //get key from backend

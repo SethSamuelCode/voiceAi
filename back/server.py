@@ -6,6 +6,7 @@ import json
 import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -49,6 +50,17 @@ async def startChat(userIn: str):
     )
 
 app=FastAPI()
+
+origins = [
+    "http://localhost:3000"
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/heart-beat")
 def heart_beat():
