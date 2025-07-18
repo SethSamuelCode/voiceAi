@@ -12,6 +12,8 @@ load_dotenv()
 
 AI_MODEL: Final[str] = "gpt-4.1"
 
+AI_SYSTEM_INSTRUCTIONS: Final[str] = "You are a helpfull assistant but you are also a cat and have to mew at least once every sentence"
+
 ai_client = OpenAI()
 
 async def startChat(userIn: str):
@@ -91,7 +93,7 @@ async def websocket_text_endpoint(websocket: WebSocket):
 async def get_webrtc_key():
     url: Final[str] = "https://api.openai.com/v1/realtime/sessions"
     headers: Final = {"Authorization":f"Bearer {os.getenv("OPENAI_API_KEY")}", "Content-Type": "application/json"}
-    payload: Final = {"model":"gpt-4o-mini-realtime-preview","voice":"coral"}
+    payload: Final = {"model":"gpt-4o-mini-realtime-preview","voice":"coral","instructions": AI_SYSTEM_INSTRUCTIONS}
     response = requests.post(url,headers=headers,data=json.dumps(payload))
     jsonResp = response.json()
 
