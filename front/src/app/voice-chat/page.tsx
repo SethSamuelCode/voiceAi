@@ -82,10 +82,30 @@ export default function page() {
     }
   }
 
+  async function initVoiceToTextToVoice(){
+
+  }
+
+  function stopVoiceToTextToVoice(){
+
+  }
+
   return (
-    <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4">
-      <div onClick={initVoice}>START</div>
-      <div onClick={stopAndCleanUpVoice}>STOP</div>
+    <div>
+      <div className="flex flex-col border border-green-500" >
+        <p className="self-center">audio to audio</p>
+        <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4 [&_div]:cursor-pointer ">
+          <div onClick={initVoice}>START</div>
+          <div onClick={stopAndCleanUpVoice}>STOP</div>
+        </div>
+      </div>
+      <div className="flex flex-col border border-green-500">
+        <p className="self-center"> audio to text to audio</p>
+        <div className="flex justify-around [&_div]:border [&_div]:border-red-400 [&_div]:p-4 [&_div]:m-4 [&_div]:cursor-pointer " >
+          <div onClick={initVoiceToTextToVoice}>START</div>
+          <div onClick={stopVoiceToTextToVoice} >STOP</div>
+        </div>
+      </div>
     </div>
   );
 }
