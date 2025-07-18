@@ -99,6 +99,19 @@ async def get_webrtc_key():
 
     return jsonResp
 
+@app.websocket("/audio")
+async def audio_websocket(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            data= await websocket.receive_bytes()
+            # print(data.hex())
+            await websocket.send_bytes(data=data)
+    except WebSocketDisconnect:
+        print("client disconnected")
+    except Exception as e :
+        print(f"error: {e}") 
+
 # @app.websocket("/chat-ws-voice")
 # async def websocket_voice_endpoint(websocket: WebSocket):
 #     await websocket.accept()

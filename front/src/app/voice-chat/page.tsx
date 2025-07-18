@@ -10,6 +10,8 @@ export default function page() {
   const refLocalMic = useRef<MediaStream>(null);
   //audio element ref
   const refAudioEl = useRef<HTMLAudioElement>(null);
+  //websocketRef
+  const refWebSocket = useRef<WebSocket>(null);
 
   console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL);
 
@@ -84,27 +86,66 @@ export default function page() {
 
   async function initVoiceToTextToVoice() {
     //add local mic
-    refLocalMic.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+    refLocalMic.current = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 44100,
+      },
+    });
+    const micMediaStream = new MediaStream([refLocalMic.current.getTracks()[0]]);
+    refWebSocket.current = new WebSocket(`${BACKEND_SERVER_BASE_URL}/audio`);
 
+    //media recorder to record the audio
+    const mediaRecorder = new MediaRecorder(refLocalMic.current, {
+      mimeType: "audio/webm",
+    });
+
+        // Handle data available from MediaRecorder
+    mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && refWebSocket.current?.readyState === WebSocket.OPEN) {
+            refWebSocket.current.send(event.data);
+        }
+    };
+
+        // Handle WebSocket connection
+    refWebSocket.current.onopen = () => {
+        console.log('WebSocket Connected');
+        mediaRecorder.start(100); // Collect data every 100ms
+    };
+
+    refWebSocket.current.onclose = () => {
+        console.log('WebSocket Closed');
+        mediaRecorder.stop();
+    };
+
+    refWebSocket.current.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        mediaRecorder.stop();
+    };
+
+    refWebSocket.current.onmessage = (e) =>{
+      console.log(e.data)
+    }
     //add playback from audio source to speakers
-    refAudioEl.current = document.createElement("audio");
-    refAudioEl.current.autoplay = true;
+    // refAudioEl.current = document.createElement("audio");
+    // refAudioEl.current.autoplay = true;
 
     //give mic back to speakers
-    const micMediaStream = new MediaStream([refLocalMic.current.getTracks()[0]])
-    refAudioEl.current.srcObject=micMediaStream
+    // const micMediaStream = new MediaStream([refLocalMic.current.getTracks()[0]])
+    // refAudioEl.current.srcObject=micMediaStream
   }
 
   function stopVoiceToTextToVoice() {
     if (refLocalMic.current) {
-        refLocalMic.current.getTracks().forEach(track => track.stop());
-        refLocalMic.current = null;
+      refLocalMic.current.getTracks().forEach((track) => track.stop());
+      refLocalMic.current = null;
     }
     if (refAudioEl.current) {
-        refAudioEl.current.srcObject = null;
-        refAudioEl.current = null;
+      refAudioEl.current.srcObject = null;
+      refAudioEl.current = null;
     }
-}
+  }
 
   return (
     <div>
