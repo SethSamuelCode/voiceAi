@@ -4,15 +4,32 @@ from typing import Final
 import requests 
 import json
 import os
+import numpy
+import av
+import io
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+
+from agents import Agent, ModelSettings, function_tool, Runner, SQLiteSession
+from agents.voice import SingleAgentVoiceWorkflow, VoicePipeline, StreamedAudioInput
+import asyncio 
 
 load_dotenv()
 
 AI_MODEL: Final[str] = "gpt-4.1"
 
 AI_SYSTEM_INSTRUCTIONS: Final[str] = "You are a helpfull assistant but you are also a cat and have to mew at least once every sentence"
+
+# ----------------------- AGENTS ----------------------- #
+
+ai_Agent= Agent(
+    name="jenny",
+    instructions="You're speaking to a human, so be polite and concise.",
+    model="gpt-4o-mini",
+)
+
+
 
 ai_client = OpenAI()
 
@@ -102,11 +119,38 @@ async def get_webrtc_key():
 @app.websocket("/audio")
 async def audio_websocket(websocket: WebSocket):
     await websocket.accept()
+    audioPipeline = VoicePipeline(workflow=SingleAgentVoiceWorkflow(ai_Agent))
+    streamed_audio_input_buffer = StreamedAudioInput()
     try:
         while True:
             data= await websocket.receive_bytes()
-            # print(data.hex())
-            await websocket.send_bytes(data=data)
+            # buffer for received data
+            input_audio_raw_data_buffer = io.BytesIO(data)
+            #open the raw buffer with av to convert the data into an audio stream
+            audio_container = av.open(input_audio_raw_data_buffer, mode='r')
+            try:
+                #decode audio frames into numpyArrays 
+                for frame in audio_container.decode(audio=0):
+                    # convert the audio frame to a numpy array
+                    numpy_array = frame.to_ndarray().astype(numpy.float32)
+                    # Feed the audio data into the pipeline
+                    await streamed_audio_input_buffer.add_audio(numpy_array)
+                    # Process the audio through the pipeline
+                    result = await audioPipeline.run(streamed_audio_input_buffer)
+
+                    async for event in result.stream():
+                            # play audio
+                            if event.type == "voice_stream_event_audio":
+                                print(event.data)
+                            # lifecycle
+                            elif event.type == "voice_stream_event_lifecycle":
+                                print(event.event)
+                            # error
+                            elif event.type == "voice_stream_event_error":
+                                print(event.error)
+            except Exception as e:
+                print(e)
+            # await websocket.send_bytes(data=data)
     except WebSocketDisconnect:
         print("client disconnected")
     except Exception as e :
