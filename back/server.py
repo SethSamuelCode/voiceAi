@@ -134,22 +134,22 @@ async def audio_websocket(websocket: WebSocket):
 
     # Generate unique filename using timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(output_dir, f"audio_{timestamp}.webm")
+    output_file = os.path.join(output_dir, f"audio_{timestamp}.mp4")
 
 
     ffmpeg_process = subprocess.Popen([
-        
         'ffmpeg',
         '-f', 'webm',            # Input format: WebM
         '-i', 'pipe:0',          # Read from stdin
-        '-c:a', 'libopus',       # Output codec: Opus
-        '-b:a', '128k',          # Bitrate
-        '-ar', '48000',          # Sample rate (Opus works best with 48kHz)
-        '-ac', '1',              # Output channels (mono)
+        '-c:a', 'aac',           # Output codec: AAC
+        '-b:a', '192k',          # Bitrate (higher for AAC)
+        '-ar', '44100',          # Sample rate (standard for AAC)
+        '-ac', '2',              # Output channels (stereo)
         '-vn',                   # No video
-        '-f', 'webm',            # Output container format
+        '-f', 'mp4',             # Output container format
+        '-movflags', '+faststart', # Optimize for web playback
         '-y',                    # Overwrite output file
-        output_file              # Output WebM file
+        output_file              # Output MP4 file
     ], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
     try:
@@ -193,16 +193,41 @@ async def audio_websocket(websocket: WebSocket):
     except Exception as e :
         print(f"error: {e}") 
     finally:
-        # Clean up the FFmpeg process
+        # Clean up and finalize the FFmpeg process
         try:
+            print("Finalizing FFmpeg process...")
             if ffmpeg_process.stdin is not None:
+                # Close stdin to signal end of input
                 ffmpeg_process.stdin.close()
+            
+            # Wait for FFmpeg to finish processing
+            return_code = ffmpeg_process.wait(timeout=10)
+            
+            # Get any error output if available
+            if ffmpeg_process.stderr is not None:
+                stderr_data = ffmpeg_process.stderr.read()
+                if return_code != 0 and stderr_data:
+                    print(f"FFmpeg error (return code {return_code}):")
+                    print(stderr_data.decode())
+            
+            if return_code == 0:
+                print(f"Successfully saved audio to {output_file}")
+            else:
+                print(f"FFmpeg process failed with return code {return_code}")
+                
+            # Close remaining pipes
+            if ffmpeg_process.stderr is not None:
+                ffmpeg_process.stderr.close()
             if ffmpeg_process.stdout is not None:
                 ffmpeg_process.stdout.close()
-            ffmpeg_process.terminate()
-            ffmpeg_process.wait(timeout=5)
         except Exception as e:
-            print(f"Error closing FFmpeg process: {e}")
+            print(f"Error finalizing FFmpeg process: {e}")
+            # Try to force terminate if something goes wrong
+            try:
+                ffmpeg_process.terminate()
+                ffmpeg_process.wait(timeout=2)
+            except:
+                ffmpeg_process.kill()
 
 # @app.websocket("/chat-ws-voice")
 # async def websocket_voice_endpoint(websocket: WebSocket):
