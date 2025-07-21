@@ -9,6 +9,7 @@ import av
 import io
 import ffmpeg
 import subprocess
+from datetime import datetime
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +31,7 @@ ai_Agent= Agent(
     instructions="You're speaking to a human, so be polite and concise.",
     model="gpt-4o-mini",
 )
+
 
 
 
@@ -121,44 +123,86 @@ async def get_webrtc_key():
 @app.websocket("/audio")
 async def audio_websocket(websocket: WebSocket):
     await websocket.accept()
+    print("socket Opened")
     audioPipeline = VoicePipeline(workflow=SingleAgentVoiceWorkflow(ai_Agent))
     streamed_audio_input_buffer = StreamedAudioInput()
+
+    # Create output directory if it doesn't exist
+    output_dir = "audio_output"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Generate unique filename using timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(output_dir, f"audio_{timestamp}.webm")
+
+
+    ffmpeg_process = subprocess.Popen([
+        
+        'ffmpeg',
+        '-f', 'webm',            # Input format: WebM
+        '-i', 'pipe:0',          # Read from stdin
+        '-c:a', 'libopus',       # Output codec: Opus
+        '-b:a', '128k',          # Bitrate
+        '-ar', '48000',          # Sample rate (Opus works best with 48kHz)
+        '-ac', '1',              # Output channels (mono)
+        '-vn',                   # No video
+        '-f', 'webm',            # Output container format
+        '-y',                    # Overwrite output file
+        output_file              # Output WebM file
+    ], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+
     try:
         while True:
-            data= await websocket.receive_bytes()
-            # buffer for received data
-            input_audio_raw_data_buffer = io.BytesIO(data)
-            #open the raw buffer with av to convert the data into an audio stream
-            audio_container = av.open(input_audio_raw_data_buffer, mode='r')
+            data_from_websocket = await websocket.receive_bytes()
+            print("data from web socket get")
             try:
-                #decode audio frames into numpyArrays 
-                for frame in audio_container.decode(audio=0):
-                    print("frame processed")
-                    # convert the audio frame to a numpy array
-                    numpy_array = frame.to_ndarray().astype(numpy.int16)
-                    print(numpy_array)
-                    # Feed the audio data into the pipeline
-                    await streamed_audio_input_buffer.add_audio(numpy_array)
-                    # Process the audio through the pipeline
-                    result = await audioPipeline.run(streamed_audio_input_buffer)
-
-                    async for event in result.stream():
-                            # play audio
-                            if event.type == "voice_stream_event_audio":
-                                print(event.data)
-                            # lifecycle
-                            elif event.type == "voice_stream_event_lifecycle":
-                                print(event.event)
-                            # error
-                            elif event.type == "voice_stream_event_error":
-                                print(event.error)
+                if ffmpeg_process.stdin is not None:
+                    print("push to ffmpeg")
+                    ffmpeg_process.stdin.write(data_from_websocket)
+                    ffmpeg_process.stdin.flush()
+                else:
+                    print("FFmpeg process stdin is None.")
+                    continue
+                
+                if ffmpeg_process.stdout is not None:
+                    audio_chunk = ffmpeg_process.stdout.read(4096)
+                    numpy_array = numpy.frombuffer(audio_chunk, dtype=numpy.int16)
+                    if len(numpy_array) > 0:
+                        print(numpy_array)
+                        # await streamed_audio_input_buffer.add_audio(numpy_array)
+                        # # Process the audio through the pipeline
+                        # result = await audioPipeline.run(streamed_audio_input_buffer)
+                        # async for event in result.stream():
+                        #         # play audio
+                        #         if event.type == "voice_stream_event_audio":
+                        #             print(event.data)
+                        #         # lifecycle
+                        #         elif event.type == "voice_stream_event_lifecycle":
+                        #             print(event.event)
+                        #         # error
+                        #         elif event.type == "voice_stream_event_error":
+                        #             print(event.error)
+            except subprocess.SubprocessError as e:
+                print(f"FFmpeg subprocess error: {e}")
             except Exception as e:
-                print(e)
+                print(f"some exception{e}")
             # await websocket.send_bytes(data=data)
     except WebSocketDisconnect:
         print("client disconnected")
     except Exception as e :
         print(f"error: {e}") 
+    finally:
+        # Clean up the FFmpeg process
+        try:
+            if ffmpeg_process.stdin is not None:
+                ffmpeg_process.stdin.close()
+            if ffmpeg_process.stdout is not None:
+                ffmpeg_process.stdout.close()
+            ffmpeg_process.terminate()
+            ffmpeg_process.wait(timeout=5)
+        except Exception as e:
+            print(f"Error closing FFmpeg process: {e}")
 
 # @app.websocket("/chat-ws-voice")
 # async def websocket_voice_endpoint(websocket: WebSocket):

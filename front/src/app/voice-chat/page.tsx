@@ -17,6 +17,9 @@ export default function page() {
   //source buffer used to process incoming audio data to be demuxed and played
   const refSourceBuffer = useRef<SourceBuffer>(null);
 
+  //for file saving
+  const audioChunks = useRef<Blob[]>([]);
+
   console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL);
 
   async function initVoice() {
@@ -71,6 +74,19 @@ export default function page() {
     await refPeerConnection.current.setRemoteDescription(answerFromSdpRequest);
   }
 
+  const saveRecording = () => {
+    if (audioChunks.current.length) {
+      const blob = new Blob(audioChunks.current, { type: "audio/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `recording-${new Date().getTime()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      audioChunks.current = []; // Clear the chunks after saving
+    }
+  };
+
   function stopAndCleanUpVoice() {
     if (refPeerConnection.current) {
       refPeerConnection.current.close();
@@ -102,13 +118,15 @@ export default function page() {
 
     //media recorder to record the audio
     const mediaRecorder = new MediaRecorder(refLocalMic.current, {
-      mimeType: "audio/aac",
+      mimeType: "audio/webm; codecs=opus",
     });
 
     // Handle data available from MediaRecorder
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0 && refWebSocket.current?.readyState === WebSocket.OPEN) {
         refWebSocket.current.send(event.data);
+        // Store the chunk for later saving
+        audioChunks.current.push(event.data);
       }
     };
 
@@ -120,7 +138,7 @@ export default function page() {
 
     refMediaSource.current.addEventListener("sourceopen", () => {
       if (refMediaSource.current) {
-        refSourceBuffer.current = refMediaSource.current.addSourceBuffer('audio/webm; codecs="opus"');
+        refSourceBuffer.current = refMediaSource.current.addSourceBuffer("audio/webm; codecs=opus");
       }
     });
 
@@ -158,44 +176,54 @@ export default function page() {
   }
 
   function stopVoiceToTextToVoice() {
+
+    saveRecording();
     // Clean up microphone tracks
     if (refLocalMic.current) {
+      // console.log("clean up mic")
       refLocalMic.current.getTracks().forEach((track) => track.stop());
       refLocalMic.current = null;
     }
 
     // Clean up audio element
     if (refAudioEl.current) {
+      // console.log("clean up audio EL")
       refAudioEl.current.pause();
-      refAudioEl.current.src = '';
+      refAudioEl.current.src = "";
       refAudioEl.current = null;
     }
 
     // Clean up MediaSource and SourceBuffer
     if (refSourceBuffer.current) {
+      // console.log("clean up ref source buffer")
       try {
-        refSourceBuffer.current.abort();
-        refSourceBuffer.current = null;
+        // refSourceBuffer.current.abort();
+        if (refSourceBuffer.current) {
+          refSourceBuffer.current = null;
+        }
       } catch (e) {
-        console.warn('Error cleaning up SourceBuffer:', e);
+        console.warn("Error cleaning up SourceBuffer:", e);
       }
     }
 
     if (refMediaSource.current) {
+      // console.log("clean up ref media source")
       try {
-        if (refMediaSource.current.readyState === 'open') {
+        if (refMediaSource.current.readyState === "open") {
           refMediaSource.current.endOfStream();
         }
         refMediaSource.current = null;
       } catch (e) {
-        console.warn('Error cleaning up MediaSource:', e);
+        // console.warn('Error cleaning up MediaSource:', e);
       }
     }
 
     // Clean up WebSocket
     if (refWebSocket.current) {
-      if (refWebSocket.current.readyState === WebSocket.OPEN || 
-          refWebSocket.current.readyState === WebSocket.CONNECTING) {
+      if (
+        refWebSocket.current.readyState === WebSocket.OPEN ||
+        refWebSocket.current.readyState === WebSocket.CONNECTING
+      ) {
         refWebSocket.current.close();
       }
       refWebSocket.current = null;
