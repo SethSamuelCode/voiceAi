@@ -12,6 +12,10 @@ export default function page() {
   const refAudioEl = useRef<HTMLAudioElement>(null);
   //websocketRef
   const refWebSocket = useRef<WebSocket>(null);
+  //media source used to play incoming audio
+  const refMediaSource = useRef<MediaSource>(null);
+  //source buffer used to process incoming audio data to be demuxed and played
+  const refSourceBuffer = useRef<SourceBuffer>(null);
 
   console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL);
 
@@ -101,32 +105,53 @@ export default function page() {
       mimeType: "audio/webm",
     });
 
-        // Handle data available from MediaRecorder
+    // Handle data available from MediaRecorder
     mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && refWebSocket.current?.readyState === WebSocket.OPEN) {
-            refWebSocket.current.send(event.data);
-        }
+      if (event.data.size > 0 && refWebSocket.current?.readyState === WebSocket.OPEN) {
+        refWebSocket.current.send(event.data);
+      }
     };
 
-        // Handle WebSocket connection
+    //setup media source to process incoming audio
+    refMediaSource.current = new MediaSource();
+    refAudioEl.current = document.createElement("audio");
+    refAudioEl.current.autoplay = true;
+    refAudioEl.current.src = URL.createObjectURL(refMediaSource.current);
+
+    refMediaSource.current.addEventListener("sourceopen", () => {
+      if (refMediaSource.current) {
+        refSourceBuffer.current = refMediaSource.current.addSourceBuffer('audio/webm; codecs="opus"');
+      }
+    });
+
+    //push the data from the websocket into the buffer
+    refWebSocket.current.onmessage = async (e) => {
+      if (refSourceBuffer.current && !refSourceBuffer.current.updating) {
+        const tempArrayBuffer = await e.data.arrayBuffer();
+        refSourceBuffer.current.appendBuffer(tempArrayBuffer);
+      }
+    };
+
+    // Handle WebSocket connection
     refWebSocket.current.onopen = () => {
-        console.log('WebSocket Connected');
-        mediaRecorder.start(100); // Collect data every 100ms
+      console.log("WebSocket Connected");
+      mediaRecorder.start(100); // Collect data every 100ms
     };
 
     refWebSocket.current.onclose = () => {
-        console.log('WebSocket Closed');
-        mediaRecorder.stop();
+      console.log("WebSocket Closed");
+      mediaRecorder.stop();
     };
 
     refWebSocket.current.onerror = (error) => {
-        console.error('WebSocket Error:', error);
-        mediaRecorder.stop();
+      console.error("WebSocket Error:", error);
+      mediaRecorder.stop();
     };
 
-    refWebSocket.current.onmessage = (e) =>{
-      console.log(e.data)
-    }
+    refWebSocket.current.onmessage = (e) => {
+      console.log(e.data);
+    };
+
     //add playback from audio source to speakers
     // refAudioEl.current = document.createElement("audio");
     // refAudioEl.current.autoplay = true;
@@ -144,6 +169,12 @@ export default function page() {
     if (refAudioEl.current) {
       refAudioEl.current.srcObject = null;
       refAudioEl.current = null;
+    }
+
+    if (refMediaSource.current) {
+      if (refMediaSource.current.readyState === "open") {
+        refMediaSource.current.endOfStream();
+      }
     }
   }
 
