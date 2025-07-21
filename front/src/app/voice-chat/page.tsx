@@ -102,7 +102,7 @@ export default function page() {
 
     //media recorder to record the audio
     const mediaRecorder = new MediaRecorder(refLocalMic.current, {
-      mimeType: "audio/webm",
+      mimeType: "audio/aac",
     });
 
     // Handle data available from MediaRecorder
@@ -148,10 +148,6 @@ export default function page() {
       mediaRecorder.stop();
     };
 
-    refWebSocket.current.onmessage = (e) => {
-      console.log(e.data);
-    };
-
     //add playback from audio source to speakers
     // refAudioEl.current = document.createElement("audio");
     // refAudioEl.current.autoplay = true;
@@ -162,24 +158,47 @@ export default function page() {
   }
 
   function stopVoiceToTextToVoice() {
+    // Clean up microphone tracks
     if (refLocalMic.current) {
       refLocalMic.current.getTracks().forEach((track) => track.stop());
       refLocalMic.current = null;
     }
+
+    // Clean up audio element
     if (refAudioEl.current) {
-      refAudioEl.current.srcObject = null;
+      refAudioEl.current.pause();
+      refAudioEl.current.src = '';
       refAudioEl.current = null;
     }
 
-    if (refMediaSource.current) {
-      if (refMediaSource.current.readyState === "open") {
-        refMediaSource.current.endOfStream();
+    // Clean up MediaSource and SourceBuffer
+    if (refSourceBuffer.current) {
+      try {
+        refSourceBuffer.current.abort();
+        refSourceBuffer.current = null;
+      } catch (e) {
+        console.warn('Error cleaning up SourceBuffer:', e);
       }
     }
 
-    if(refWebSocket.current?.OPEN){
-      refWebSocket.current.close()
-      refWebSocket.current = null
+    if (refMediaSource.current) {
+      try {
+        if (refMediaSource.current.readyState === 'open') {
+          refMediaSource.current.endOfStream();
+        }
+        refMediaSource.current = null;
+      } catch (e) {
+        console.warn('Error cleaning up MediaSource:', e);
+      }
+    }
+
+    // Clean up WebSocket
+    if (refWebSocket.current) {
+      if (refWebSocket.current.readyState === WebSocket.OPEN || 
+          refWebSocket.current.readyState === WebSocket.CONNECTING) {
+        refWebSocket.current.close();
+      }
+      refWebSocket.current = null;
     }
   }
 

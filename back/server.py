@@ -7,6 +7,8 @@ import os
 import numpy
 import av
 import io
+import ffmpeg
+import subprocess
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -131,8 +133,10 @@ async def audio_websocket(websocket: WebSocket):
             try:
                 #decode audio frames into numpyArrays 
                 for frame in audio_container.decode(audio=0):
+                    print("frame processed")
                     # convert the audio frame to a numpy array
-                    numpy_array = frame.to_ndarray().astype(numpy.float32)
+                    numpy_array = frame.to_ndarray().astype(numpy.int16)
+                    print(numpy_array)
                     # Feed the audio data into the pipeline
                     await streamed_audio_input_buffer.add_audio(numpy_array)
                     # Process the audio through the pipeline
