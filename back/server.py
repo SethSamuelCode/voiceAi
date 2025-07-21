@@ -10,6 +10,8 @@ import io
 import ffmpeg
 import subprocess
 from datetime import datetime
+import threading
+import queue
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -126,68 +128,114 @@ async def audio_websocket(websocket: WebSocket):
     print("socket Opened")
     audioPipeline = VoicePipeline(workflow=SingleAgentVoiceWorkflow(ai_Agent))
     streamed_audio_input_buffer = StreamedAudioInput()
+    
 
-    # Create output directory if it doesn't exist
-    output_dir = "audio_output"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Generate unique filename using timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(output_dir, f"audio_{timestamp}.mp4")
-
-
+    # Use os.pipe() for more explicit pipe creation
+    import os
+    r, w = os.pipe()
+    
     ffmpeg_process = subprocess.Popen([
         'ffmpeg',
         '-f', 'webm',            # Input format: WebM
         '-i', 'pipe:0',          # Read from stdin
-        '-c:a', 'aac',           # Output codec: AAC
-        '-b:a', '192k',          # Bitrate (higher for AAC)
-        '-ar', '44100',          # Sample rate (standard for AAC)
-        '-ac', '2',              # Output channels (stereo)
+        '-f', 's16le',           # Signed 16-bit output format
+        '-acodec', 'pcm_s16le',  # Signed 16-bit PCM codec
+        '-ar', '16000',          # Sample rate: 16kHz (common for speech)
+        '-ac', '1',              # Mono audio
         '-vn',                   # No video
-        '-f', 'mp4',             # Output container format
-        '-movflags', '+faststart', # Optimize for web playback
-        '-y',                    # Overwrite output file
-        output_file              # Output MP4 file
-    ], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        '-write_header', '0',    # Don't write file header
+        'pipe:1'                 # Output to stdout
+    ], stdout=w, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+       bufsize=0)  # Unbuffered mode
+    
+    # Close the write end of the pipe in the parent process
+    os.close(w)
+    
+    # Create a file-like object for reading
+    stdout_reader = os.fdopen(r, 'rb')
+
+    # Create a thread-safe queue for audio chunks
+    audio_queue = queue.Queue()
+    stop_thread = threading.Event()
+
+    def stdout_reader_thread(stdout_reader, audio_queue, stop_event):
+        while not stop_event.is_set():
+            try:
+                chunk = stdout_reader.read(4096)
+                if chunk:
+                    audio_queue.put(chunk)
+                else:
+                    # EOF reached
+                    break
+            except Exception as e:
+                print(f"Error in stdout_reader_thread: {e}")
+                break
+
+    # Start the background thread
+    reader_thread = threading.Thread(target=stdout_reader_thread, args=(stdout_reader, audio_queue, stop_thread), daemon=True)
+    reader_thread.start()
 
     try:
         while True:
-            data_from_websocket = await websocket.receive_bytes()
-            print("data from web socket get")
             try:
-                if ffmpeg_process.stdin is not None:
-                    print("push to ffmpeg")
-                    ffmpeg_process.stdin.write(data_from_websocket)
-                    ffmpeg_process.stdin.flush()
+                data_from_websocket = await websocket.receive_bytes()
+                print("data from web socket get")
+            except Exception as ws_recv_error:
+                print(f"WebSocket receive error: {ws_recv_error}")
+                break
+
+            try:
+                # Robust stdin writing
+                if ffmpeg_process.stdin and not ffmpeg_process.stdin.closed:
+                    try:
+                        ffmpeg_process.stdin.write(data_from_websocket)
+                        ffmpeg_process.stdin.flush()
+                        print("Pushed data to FFmpeg")
+                    except BrokenPipeError:
+                        print("FFmpeg stdin pipe is broken")
+                        break
+                    except Exception as stdin_error:
+                        print(f"Error writing to FFmpeg stdin: {stdin_error}")
+                        break
                 else:
-                    print("FFmpeg process stdin is None.")
-                    continue
-                
-                if ffmpeg_process.stdout is not None:
-                    audio_chunk = ffmpeg_process.stdout.read(4096)
-                    numpy_array = numpy.frombuffer(audio_chunk, dtype=numpy.int16)
-                    if len(numpy_array) > 0:
-                        print(numpy_array)
-                        # await streamed_audio_input_buffer.add_audio(numpy_array)
-                        # # Process the audio through the pipeline
-                        # result = await audioPipeline.run(streamed_audio_input_buffer)
-                        # async for event in result.stream():
-                        #         # play audio
-                        #         if event.type == "voice_stream_event_audio":
-                        #             print(event.data)
-                        #         # lifecycle
-                        #         elif event.type == "voice_stream_event_lifecycle":
-                        #             print(event.event)
-                        #         # error
-                        #         elif event.type == "voice_stream_event_error":
-                        #             print(event.error)
-            except subprocess.SubprocessError as e:
-                print(f"FFmpeg subprocess error: {e}")
-            except Exception as e:
-                print(f"some exception{e}")
-            # await websocket.send_bytes(data=data)
+                    print("FFmpeg process stdin is not available")
+                    break
+
+                # Error handling for stderr
+                # if ffmpeg_process.stderr:
+                #     try:
+                #         error = ffmpeg_process.stderr.read(4096)
+                #         if error:
+                #             print(f"FFmpeg stderr: {error}")
+                #     except Exception as stderr_error:
+                #         print(f"Error reading FFmpeg stderr: {stderr_error}")
+
+                # Non-blocking audio chunk retrieval from queue
+                try:
+                    while not audio_queue.empty():
+                        audio_chunk = audio_queue.get_nowait()
+                        if audio_chunk:
+                            # print(f"Raw audio chunk received: {len(audio_chunk)} bytes")
+                            numpy_array = numpy.frombuffer(audio_chunk, dtype=numpy.int16)
+                            if len(numpy_array) > 0:
+                                # print("Audio data details:")
+                                # print("First 50 audio samples:", numpy_array[:50])
+                                # print(f"Total samples: {len(numpy_array)}")
+                                # print(f"Array shape: {numpy_array.shape}")
+                                # print(f"Array dtype: {numpy_array.dtype}")
+                                # print(f"Min value: {numpy_array.min()}")
+                                # print(f"Max value: {numpy_array.max()}")
+                                # print(f"Mean value: {numpy_array.mean()}")
+                                # print(f"Standard deviation: {numpy_array.std()}")
+                        else:
+                            print("Audio chunk is empty (zero bytes)")
+                except Exception as stdout_error:
+                    print(f"Error reading FFmpeg stdout: {stdout_error}")
+                    break
+
+            except Exception as process_error:
+                print(f"FFmpeg processing error: {process_error}")
+                break
     except WebSocketDisconnect:
         print("client disconnected")
     except Exception as e :
@@ -196,33 +244,26 @@ async def audio_websocket(websocket: WebSocket):
         # Clean up and finalize the FFmpeg process
         try:
             print("Finalizing FFmpeg process...")
+            stop_thread.set()
+            reader_thread.join(timeout=2)
             if ffmpeg_process.stdin is not None:
-                # Close stdin to signal end of input
                 ffmpeg_process.stdin.close()
-            
-            # Wait for FFmpeg to finish processing
             return_code = ffmpeg_process.wait(timeout=10)
-            
-            # Get any error output if available
             if ffmpeg_process.stderr is not None:
                 stderr_data = ffmpeg_process.stderr.read()
                 if return_code != 0 and stderr_data:
                     print(f"FFmpeg error (return code {return_code}):")
                     print(stderr_data.decode())
-            
-            if return_code == 0:
-                print(f"Successfully saved audio to {output_file}")
-            else:
-                print(f"FFmpeg process failed with return code {return_code}")
-                
-            # Close remaining pipes
+            # if return_code == 0:
+            #     # print(f"Successfully saved audio to {output_file}")
+            # else:
+            #     print(f"FFmpeg process failed with return code {return_code}")
             if ffmpeg_process.stderr is not None:
                 ffmpeg_process.stderr.close()
             if ffmpeg_process.stdout is not None:
                 ffmpeg_process.stdout.close()
         except Exception as e:
             print(f"Error finalizing FFmpeg process: {e}")
-            # Try to force terminate if something goes wrong
             try:
                 ffmpeg_process.terminate()
                 ffmpeg_process.wait(timeout=2)
@@ -237,4 +278,4 @@ async def audio_websocket(websocket: WebSocket):
 #     except WebSocketDisconnect:
 #         print("client disconnected")
 #     except Exception as e :
-#         print(f"error: {e}") 
+#         print(f"error: {e}")
