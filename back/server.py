@@ -128,6 +128,7 @@ async def audio_websocket(websocket: WebSocket):
     print("socket Opened")
     audioPipeline = VoicePipeline(workflow=SingleAgentVoiceWorkflow(ai_Agent))
     streamed_audio_input_buffer = StreamedAudioInput()
+
     
 
     # Use os.pipe() for more explicit pipe creation
@@ -143,7 +144,6 @@ async def audio_websocket(websocket: WebSocket):
         '-ar', '16000',          # Sample rate: 16kHz (common for speech)
         '-ac', '1',              # Mono audio
         '-vn',                   # No video
-        '-write_header', '0',    # Don't write file header
         'pipe:1'                 # Output to stdout
     ], stdout=w, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
        bufsize=0)  # Unbuffered mode
@@ -176,10 +176,23 @@ async def audio_websocket(websocket: WebSocket):
     reader_thread.start()
 
     try:
+        print("ai starting")
+        ai_result = await audioPipeline.run(streamed_audio_input_buffer)
+        print("ai connected")
         while True:
             try:
-                data_from_websocket = await websocket.receive_bytes()
+                #start ai pipeline 
+
+                async for event in ai_result.stream():
+                    if event.type == "voice_stream_event_audio":
+                        print(event.data)
+                    elif event.type == "voice_stream_event_lifecycle":
+                        print(event.event)
+                    elif event.type == "voice_stream_event_error":
+                        print(event.error)
+
                 print("data from web socket get")
+                data_from_websocket = await websocket.receive_bytes()
             except Exception as ws_recv_error:
                 print(f"WebSocket receive error: {ws_recv_error}")
                 break
@@ -201,32 +214,15 @@ async def audio_websocket(websocket: WebSocket):
                     print("FFmpeg process stdin is not available")
                     break
 
-                # Error handling for stderr
-                # if ffmpeg_process.stderr:
-                #     try:
-                #         error = ffmpeg_process.stderr.read(4096)
-                #         if error:
-                #             print(f"FFmpeg stderr: {error}")
-                #     except Exception as stderr_error:
-                #         print(f"Error reading FFmpeg stderr: {stderr_error}")
-
                 # Non-blocking audio chunk retrieval from queue
                 try:
                     while not audio_queue.empty():
                         audio_chunk = audio_queue.get_nowait()
                         if audio_chunk:
-                            # print(f"Raw audio chunk received: {len(audio_chunk)} bytes")
                             numpy_array = numpy.frombuffer(audio_chunk, dtype=numpy.int16)
                             if len(numpy_array) > 0:
-                                # print("Audio data details:")
-                                # print("First 50 audio samples:", numpy_array[:50])
-                                # print(f"Total samples: {len(numpy_array)}")
-                                # print(f"Array shape: {numpy_array.shape}")
-                                # print(f"Array dtype: {numpy_array.dtype}")
-                                # print(f"Min value: {numpy_array.min()}")
-                                # print(f"Max value: {numpy_array.max()}")
-                                # print(f"Mean value: {numpy_array.mean()}")
-                                # print(f"Standard deviation: {numpy_array.std()}")
+                                print(f"Standard deviation: {numpy_array.std()}")
+                                await streamed_audio_input_buffer.add_audio(audio_chunk)
                         else:
                             print("Audio chunk is empty (zero bytes)")
                 except Exception as stdout_error:
@@ -236,6 +232,9 @@ async def audio_websocket(websocket: WebSocket):
             except Exception as process_error:
                 print(f"FFmpeg processing error: {process_error}")
                 break
+
+
+
     except WebSocketDisconnect:
         print("client disconnected")
     except Exception as e :
