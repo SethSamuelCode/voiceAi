@@ -176,6 +176,11 @@ export default function page() {
         refMediaSource.current.endOfStream();
       }
     }
+
+    if(refWebSocket.current?.OPEN){
+      refWebSocket.current.close()
+      refWebSocket.current = null
+    }
   }
 
   return (
