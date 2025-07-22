@@ -122,154 +122,181 @@ async def get_webrtc_key():
 
     return jsonResp
 
-@app.websocket("/audio")
-async def audio_websocket(websocket: WebSocket):
-    await websocket.accept()
-    print("socket Opened")
-    audioPipeline = VoicePipeline(workflow=SingleAgentVoiceWorkflow(ai_Agent))
-    streamed_audio_input_buffer = StreamedAudioInput()
+# @app.websocket("/audio")
+# async def audio_websocket(websocket: WebSocket):
+#     await websocket.accept()
+#     print("socket Opened")
+#     audioPipeline = VoicePipeline(workflow=SingleAgentVoiceWorkflow(ai_Agent))
+#     streamed_audio_input_buffer = StreamedAudioInput()
 
+#     # Use os.pipe() for more explicit pipe creation
+#     import os
+#     r, w = os.pipe()
     
-
-    # Use os.pipe() for more explicit pipe creation
-    import os
-    r, w = os.pipe()
+#     ffmpeg_process = subprocess.Popen([
+#         'ffmpeg',
+#         '-f', 'webm',            # Input format: WebM
+#         '-i', 'pipe:0',          # Read from stdin
+#         '-f', 's16le',           # Signed 16-bit output format
+#         '-acodec', 'pcm_s16le',  # Signed 16-bit PCM codec
+#         '-ar', '16000',          # Sample rate: 16kHz (common for speech)
+#         '-ac', '1',              # Mono audio
+#         '-vn',                   # No video
+#         'pipe:1'                 # Output to stdout
+#     ], stdout=w, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+#        bufsize=0)  # Unbuffered mode
     
-    ffmpeg_process = subprocess.Popen([
-        'ffmpeg',
-        '-f', 'webm',            # Input format: WebM
-        '-i', 'pipe:0',          # Read from stdin
-        '-f', 's16le',           # Signed 16-bit output format
-        '-acodec', 'pcm_s16le',  # Signed 16-bit PCM codec
-        '-ar', '16000',          # Sample rate: 16kHz (common for speech)
-        '-ac', '1',              # Mono audio
-        '-vn',                   # No video
-        'pipe:1'                 # Output to stdout
-    ], stdout=w, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
-       bufsize=0)  # Unbuffered mode
+#     # Close the write end of the pipe in the parent process
+#     os.close(w)
     
-    # Close the write end of the pipe in the parent process
-    os.close(w)
-    
-    # Create a file-like object for reading
-    stdout_reader = os.fdopen(r, 'rb')
+#     # Create a file-like object for reading
+#     stdout_reader = os.fdopen(r, 'rb')
 
-    # Create a thread-safe queue for audio chunks
-    audio_queue = queue.Queue()
-    stop_thread = threading.Event()
+#     # Create a thread-safe queue for audio chunks
+#     audio_queue = queue.Queue()
+#     stop_thread = threading.Event()
 
-    def stdout_reader_thread(stdout_reader, audio_queue, stop_event):
-        while not stop_event.is_set():
-            try:
-                chunk = stdout_reader.read(4096)
-                if chunk:
-                    audio_queue.put(chunk)
-                else:
-                    # EOF reached
-                    break
-            except Exception as e:
-                print(f"Error in stdout_reader_thread: {e}")
-                break
+#     def stdout_reader_thread(stdout_reader, audio_queue, stop_event):
+#         while not stop_event.is_set():
+#             try:
+#                 chunk = stdout_reader.read(4096)
+#                 if chunk:
+#                     audio_queue.put(chunk)
+#                 else:
+#                     # EOF reached
+#                     break
+#             except Exception as e:
+#                 print(f"Error in stdout_reader_thread: {e}")
+#                 break
 
-    # Start the background thread
-    reader_thread = threading.Thread(target=stdout_reader_thread, args=(stdout_reader, audio_queue, stop_thread), daemon=True)
-    reader_thread.start()
+#     # Start the background thread
+#     reader_thread = threading.Thread(target=stdout_reader_thread, args=(stdout_reader, audio_queue, stop_thread), daemon=True)
+#     reader_thread.start()
 
-    try:
-        print("ai starting")
-        ai_result = await audioPipeline.run(streamed_audio_input_buffer)
-        print("ai connected")
-        while True:
-            try:
-                #start ai pipeline 
+#     async def websocket_audio_receiver():
+#         try:
+#             while True:
+#                 data_from_websocket = await websocket.receive_bytes()
+#                 if ffmpeg_process.stdin and not ffmpeg_process.stdin.closed:
+#                     try:
+#                         ffmpeg_process.stdin.write(data_from_websocket)
+#                         ffmpeg_process.stdin.flush()
+#                         print("Pushed data to FFmpeg")
+#                     except BrokenPipeError:
+#                         print("FFmpeg stdin pipe is broken")
+#                         break
+#                     except Exception as stdin_error:
+#                         print(f"Error writing to FFmpeg stdin: {stdin_error}")
+#                         break
+#                 else:
+#                     print("FFmpeg process stdin is not available")
+#                     break
 
-                async for event in ai_result.stream():
-                    if event.type == "voice_stream_event_audio":
-                        print(event.data)
-                    elif event.type == "voice_stream_event_lifecycle":
-                        print(event.event)
-                    elif event.type == "voice_stream_event_error":
-                        print(event.error)
+#                 # Non-blocking audio chunk retrieval from queue
+#                 while not audio_queue.empty():
+#                     audio_chunk = audio_queue.get_nowait()
+#                     if audio_chunk:
+#                         numpy_array = numpy.frombuffer(audio_chunk, dtype=numpy.int16)
+#                         if len(numpy_array) > 0:
+#                             print(f"Standard deviation: {numpy_array.std()}")
+#                             await streamed_audio_input_buffer.add_audio(audio_chunk)
+#                     else:
+#                         print("Audio chunk is empty (zero bytes)")
+#         except Exception as e:
+#             print(f"WebSocket audio receiver error: {e}")
 
-                print("data from web socket get")
-                data_from_websocket = await websocket.receive_bytes()
-            except Exception as ws_recv_error:
-                print(f"WebSocket receive error: {ws_recv_error}")
-                break
+#     async def ai_event_handler():
+#         # Start FFmpeg encoder for PCM -> WebM Opus
+#         encoder_process = subprocess.Popen([
+#             'ffmpeg',
+#             '-f', 's16le',            # Input format: PCM 16-bit
+#             '-ar', '16000',           # Sample rate
+#             '-ac', '1',               # Mono
+#             '-i', 'pipe:0',           # Read from stdin
+#             '-c:a', 'libopus',        # Encode to Opus
+#             '-f', 'webm',             # Output format
+#             '-application', 'audio',  # Opus application mode
+#             '-b:a', '32k',            # Bitrate
+#             '-loglevel', 'error',     # Only errors
+#             'pipe:1'                  # Output to stdout
+#         ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+#         try:
+#             ai_result = await audioPipeline.run(streamed_audio_input_buffer)
+#             async for event in ai_result.stream():
+#                 if event.type == "voice_stream_event_audio":
+#                     # event.data is PCM bytes
+#                     if encoder_process.stdin and not encoder_process.stdin.closed:
+#                         try:
+#                             encoder_process.stdin.write(event.data)
+#                             encoder_process.stdin.flush()
+#                             # Read available encoded data
+#                             while True:
+#                                 encoded = encoder_process.stdout.read(4096)
+#                                 if not encoded:
+#                                     break
+#                                 await websocket.send_bytes(encoded)
+#                         except Exception as enc_err:
+#                             print(f"Encoder error: {enc_err}")
+#                     else:
+#                         print("Encoder process stdin is closed")
+#                     print(event.data)
+#                 elif event.type == "voice_stream_event_lifecycle":
+#                     print(event.event)
+#                 elif event.type == "voice_stream_event_error":
+#                     print(event.error)
+#         except Exception as e:
+#             print(f"AI event handler error: {e}")
+#         finally:
+#             try:
+#                 if encoder_process.stdin:
+#                     encoder_process.stdin.close()
+#                 if encoder_process.stdout:
+#                     encoder_process.stdout.close()
+#                 if encoder_process.stderr:
+#                     encoder_process.stderr.close()
+#                 encoder_process.wait(timeout=2)
+#             except Exception as e:
+#                 print(f"Error closing encoder process: {e}")
 
-            try:
-                # Robust stdin writing
-                if ffmpeg_process.stdin and not ffmpeg_process.stdin.closed:
-                    try:
-                        ffmpeg_process.stdin.write(data_from_websocket)
-                        ffmpeg_process.stdin.flush()
-                        print("Pushed data to FFmpeg")
-                    except BrokenPipeError:
-                        print("FFmpeg stdin pipe is broken")
-                        break
-                    except Exception as stdin_error:
-                        print(f"Error writing to FFmpeg stdin: {stdin_error}")
-                        break
-                else:
-                    print("FFmpeg process stdin is not available")
-                    break
+#     try:
+#         receiver_task = asyncio.create_task(websocket_audio_receiver())
+#         ai_task = asyncio.create_task(ai_event_handler())
+#         await asyncio.gather(receiver_task, ai_task)
+#     except WebSocketDisconnect:
+#         print("client disconnected")
+#     except Exception as e:
+#         print(f"error: {e}")
+#     finally:
+#         # Clean up and finalize the FFmpeg process
+#         try:
+#             print("Finalizing FFmpeg process...")
+#             stop_thread.set()
+#             reader_thread.join(timeout=2)
+#             if ffmpeg_process.stdin is not None:
+#                 ffmpeg_process.stdin.close()
+#             return_code = ffmpeg_process.wait(timeout=10)
+#             if ffmpeg_process.stderr is not None:
+#                 stderr_data = ffmpeg_process.stderr.read()
+#                 if return_code != 0 and stderr_data:
+#                     print(f"FFmpeg error (return code {return_code}):")
+#                     print(stderr_data.decode())
+#             # if return_code == 0:
+#             #     # print(f"Successfully saved audio to {output_file}")
+#             # else:
+#             #     print(f"FFmpeg process failed with return code {return_code}")
+#             if ffmpeg_process.stderr is not None:
+#                 ffmpeg_process.stderr.close()
+#             if ffmpeg_process.stdout is not None:
+#                 ffmpeg_process.stdout.close()
+#         except Exception as e:
+#             print(f"Error finalizing FFmpeg process: {e}")
+#             try:
+#                 ffmpeg_process.terminate()
+#                 ffmpeg_process.wait(timeout=2)
+#             except:
+#                 ffmpeg_process.kill()
 
-                # Non-blocking audio chunk retrieval from queue
-                try:
-                    while not audio_queue.empty():
-                        audio_chunk = audio_queue.get_nowait()
-                        if audio_chunk:
-                            numpy_array = numpy.frombuffer(audio_chunk, dtype=numpy.int16)
-                            if len(numpy_array) > 0:
-                                print(f"Standard deviation: {numpy_array.std()}")
-                                await streamed_audio_input_buffer.add_audio(audio_chunk)
-                        else:
-                            print("Audio chunk is empty (zero bytes)")
-                except Exception as stdout_error:
-                    print(f"Error reading FFmpeg stdout: {stdout_error}")
-                    break
-
-            except Exception as process_error:
-                print(f"FFmpeg processing error: {process_error}")
-                break
-
-
-
-    except WebSocketDisconnect:
-        print("client disconnected")
-    except Exception as e :
-        print(f"error: {e}") 
-    finally:
-        # Clean up and finalize the FFmpeg process
-        try:
-            print("Finalizing FFmpeg process...")
-            stop_thread.set()
-            reader_thread.join(timeout=2)
-            if ffmpeg_process.stdin is not None:
-                ffmpeg_process.stdin.close()
-            return_code = ffmpeg_process.wait(timeout=10)
-            if ffmpeg_process.stderr is not None:
-                stderr_data = ffmpeg_process.stderr.read()
-                if return_code != 0 and stderr_data:
-                    print(f"FFmpeg error (return code {return_code}):")
-                    print(stderr_data.decode())
-            # if return_code == 0:
-            #     # print(f"Successfully saved audio to {output_file}")
-            # else:
-            #     print(f"FFmpeg process failed with return code {return_code}")
-            if ffmpeg_process.stderr is not None:
-                ffmpeg_process.stderr.close()
-            if ffmpeg_process.stdout is not None:
-                ffmpeg_process.stdout.close()
-        except Exception as e:
-            print(f"Error finalizing FFmpeg process: {e}")
-            try:
-                ffmpeg_process.terminate()
-                ffmpeg_process.wait(timeout=2)
-            except:
-                ffmpeg_process.kill()
-
-# @app.websocket("/chat-ws-voice")
+# # @app.websocket("/chat-ws-voice")
 # async def websocket_voice_endpoint(websocket: WebSocket):
 #     await websocket.accept()
 #     try:
