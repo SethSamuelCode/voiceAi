@@ -24,7 +24,7 @@ load_dotenv()
 
 AI_MODEL: Final[str] = "gpt-4.1"
 
-AI_SYSTEM_INSTRUCTIONS: Final[str] = "You are a helpfull assistant but you are also a cat and have to mew at least once every sentence. if the user wants a horroscape sign call the horror_scope_get function and let the user know you are doing this"
+AI_SYSTEM_INSTRUCTIONS: Final[str] = " your sick, yuu have to sound sick, You are a helpfull assistant but you are also a cat and have to mew at least once every sentence. if the user wants a horroscape sign call the horror_scope_get function and let the user know you are doing this"
 
 # ----------------------- AGENTS ----------------------- #
 
@@ -112,10 +112,11 @@ async def websocket_text_endpoint(websocket: WebSocket):
         print(f"error: {e}") 
     
 
-AI_VOICE_TOOLS = [ {
+AI_VOICE_TOOLS = [ 
+    {
     "type":"function",
     "name":"horror_scope_get",
-    "description": "Give todays horroscope for an astrological sign",
+    "description": "Give todays horoscope for an astrological sign",
     "parameters": {
           "type": "object",
           "properties": {
@@ -142,6 +143,7 @@ AI_VOICE_TOOLS = [ {
         }
 }]
 
+
 @app.get("/key-for-webrtc")
 async def get_webrtc_key():
     url: Final[str] = "https://api.openai.com/v1/realtime/sessions"
@@ -153,6 +155,16 @@ async def get_webrtc_key():
 
     return jsonResp
 
+@app.get("/transcription")
+def transcribe_audio():
+    url: Final[str] = "https://api.openai.com/v1/realtime/transcription_sessions"
+    headers: Final = {"Authorization":f"Bearer {os.getenv("OPENAI_API_KEY")}", "Content-Type": "application/json"}
+    # payload: Final = {"model":"gpt-4o-mini-realtime-preview","voice":"coral","instructions": AI_SYSTEM_INSTRUCTIONS,"tools":AI_VOICE_TOOLS}
+    response = requests.post(url,headers=headers)
+    jsonResp = response.json()
+    print(jsonResp)
+
+    return jsonResp
 # @app.websocket("/audio")
 # async def audio_websocket(websocket: WebSocket):
 #     await websocket.accept()
