@@ -4,11 +4,6 @@ from typing import Final
 import requests 
 import json
 import os
-import numpy
-import av
-import io
-import ffmpeg
-import subprocess
 from datetime import datetime
 import threading
 import queue
@@ -24,7 +19,7 @@ load_dotenv()
 
 AI_MODEL: Final[str] = "gpt-4.1"
 
-AI_SYSTEM_INSTRUCTIONS: Final[str] = " your sick, yuu have to sound sick, You are a helpfull assistant but you are also a cat and have to mew at least once every sentence. if the user wants a horroscape sign call the horror_scope_get function and let the user know you are doing this"
+AI_SYSTEM_INSTRUCTIONS: Final[str] = " your sick, you have to sound sick, you have a strong european accent and you speak in broken english. if the user wants a horroscape sign call the horror_scope_get function and let the user know you are doing this"
 
 # ----------------------- AGENTS ----------------------- #
 
@@ -147,7 +142,7 @@ AI_VOICE_TOOLS = [
 @app.get("/key-for-webrtc")
 async def get_webrtc_key():
     url: Final[str] = "https://api.openai.com/v1/realtime/sessions"
-    headers: Final = {"Authorization":f"Bearer {os.getenv("OPENAI_API_KEY")}", "Content-Type": "application/json"}
+    headers: Final = {"Authorization":f"Bearer {os.getenv('OPENAI_API_KEY')}", "Content-Type": "application/json"}
     payload: Final = {"model":"gpt-4o-mini-realtime-preview","voice":"coral","instructions": AI_SYSTEM_INSTRUCTIONS,"tools":AI_VOICE_TOOLS}
     response = requests.post(url,headers=headers,data=json.dumps(payload))
     jsonResp = response.json()
@@ -158,7 +153,7 @@ async def get_webrtc_key():
 @app.get("/transcription")
 def transcribe_audio():
     url: Final[str] = "https://api.openai.com/v1/realtime/transcription_sessions"
-    headers: Final = {"Authorization":f"Bearer {os.getenv("OPENAI_API_KEY")}", "Content-Type": "application/json"}
+    headers: Final = {"Authorization":f"Bearer {os.getenv('OPENAI_API_KEY')}", "Content-Type": "application/json"}
     # payload: Final = {"model":"gpt-4o-mini-realtime-preview","voice":"coral","instructions": AI_SYSTEM_INSTRUCTIONS,"tools":AI_VOICE_TOOLS}
     response = requests.post(url,headers=headers)
     jsonResp = response.json()

@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+
+WORKDIR /app/back
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+ENTRYPOINT [ "fastapi", "dev", "--host", "0.0.0.0", "--port", "8000", "--reload","server.py" ]
+# CMD [ "ls", "-la" ]
+# ENTRYPOINT [ "uvicorn", "server:app", "--host", "
