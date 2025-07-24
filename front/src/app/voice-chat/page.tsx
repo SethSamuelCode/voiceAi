@@ -27,8 +27,8 @@ export default function page() {
 
   console.log(process.env.NEXT_PUBLIC_BACKEND_SERVER_BASE_URL);
 
-  function random(){
-    return Math.floor(Math.random() *100)
+  function random() {
+    return Math.floor(Math.random() * 100);
   }
 
   function test_function(input: any): any {
@@ -82,20 +82,43 @@ export default function page() {
                 type: "function_call_output",
                 call_id: callId,
                 output: JSON.stringify({
-                  data: result
+                  data: result,
                 }),
               },
             })
           );
-        // generate response from AI
-        dataChannel.send(JSON.stringify({
-          type:"response.create"
-        }))
+          // generate response from AI
+          dataChannel.send(
+            JSON.stringify({
+              type: "response.create",
+            })
+          );
         }
-        
-      }
 
-      
+        if (functionName == "random") {
+          const result = random();
+          console.log(`RANDOM NUMBER: ${result}`)
+          // return data to AI
+          dataChannel.send(
+            JSON.stringify({
+              type: "conversation.item.create",
+              item: {
+                type: "function_call_output",
+                call_id: callId,
+                output: JSON.stringify({
+                  data: result,
+                }),
+              },
+            })
+          );
+          // generate response from AI
+          dataChannel.send(
+            JSON.stringify({
+              type: "response.create",
+            })
+          );
+        }
+      }
     });
 
     //start session
