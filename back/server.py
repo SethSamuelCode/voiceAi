@@ -15,6 +15,8 @@ from agents import Agent, ModelSettings, function_tool, Runner, SQLiteSession
 from agents.voice import SingleAgentVoiceWorkflow, VoicePipeline, StreamedAudioInput
 import asyncio 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 load_dotenv()
 
 AI_MODEL: Final[str] = "gpt-4.1"
@@ -28,9 +30,6 @@ ai_Agent= Agent(
     instructions="You're speaking to a human, so be polite and concise.",
     model="gpt-4o-mini",
 )
-
-
-
 
 ai_client = OpenAI()
 
@@ -72,7 +71,7 @@ async def startChat(userIn: str):
 app=FastAPI()
 
 origins = [
-    "http://localhost:3000"
+    "*"
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -136,6 +135,25 @@ AI_VOICE_TOOLS = [
           },
           "required": ["sign"]
         }
+},
+{
+    "type": "function",
+    "name": "test_function",
+    "description": "A test function that echoes back the input",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "input": {
+                "type": "string",
+                "description": "Input for the test function"
+            }
+        },
+        "required": ["input"]
+    }
+},{
+    "type": "function",
+    "name": "random",
+    "description": "get a random number between 0 and 100"
 }]
 
 

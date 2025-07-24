@@ -3,3 +3,7 @@
     ai = "ai",
   }
 
+  export interface ChatObject {
+    owner: OwnerEnum;
+    message: string;
+  }
